@@ -174,7 +174,9 @@
   .sub.done .check{background:var(--ink);border-color:var(--ink)}
   .sub .check svg{opacity:0;transition:.15s}
   .sub.done .check svg{opacity:1}
-  .sub .tt{flex:1;font-size:13px;font-weight:500}
+  .sub .tt{flex:1;font-size:13px;font-weight:500;cursor:pointer}
+  .subdue{flex:none;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums;background:var(--bg-soft);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+  .subdue.late{color:var(--warn);border-color:var(--warn);background:var(--warn-bg);font-weight:600}
   .sub.done .tt{color:var(--ink-4);text-decoration:line-through;text-decoration-thickness:1.5px}
   .sub .del{opacity:0;color:var(--ink-4);font-size:15px;width:22px;height:22px;border-radius:6px;transition:.15s;flex:none}
   .sub:hover .del{opacity:1}
@@ -284,13 +286,14 @@
   <!-- ========== TASKS ========== -->
   <section id="tab-tasks" class="hide">
     <div class="card">
-      <div class="card-h"><h2>タスクを追加</h2><span class="muted">量(任意)は語数/ページ/節など何でも</span></div>
+      <div class="card-h"><h2>中タスクを追加</h2><span class="muted">量(任意)は語数/ページ/節など何でも</span></div>
       <div class="add-row">
-        <input class="field title" id="ntTitle" placeholder="例）第3章 ドラフト執筆" onkeydown="if(event.key==='Enter')App.addTask()">
+        <input class="field title" id="ntTitle" placeholder="例）第3章 ドラフト執筆" onkeydown="if(event.key==='Enter'&&!event.isComposing)App.addTask()">
         <select class="field" id="ntStage" style="flex:none;width:120px"></select>
         <input class="field est" id="ntEst" type="number" min="0" placeholder="量">
         <button class="btn" onclick="App.addTask()">追加</button>
       </div>
+      <p class="note" style="margin-bottom:10px">💡 小タスクは、追加した中タスクの行をクリックすると作れます。小タスクを全部チェックすると中タスクも完了扱いに。</p>
       <div class="row" style="align-items:center">
         <span class="note">よく使う工程はテンプレ化 →</span>
         <button class="btn ghost sm" style="flex:none" onclick="App.saveAsTemplate()">現在のタスクをテンプレに保存</button>
@@ -575,13 +578,17 @@ const App = {
         <button class="del" onclick="App.delTask('${t.id}')" aria-label="削除">×</button>
       </div>`;
       const body=!open?'':`<div class="subwrap">
-        ${ss.map(s=>`<div class="sub ${s.done?'done':''}">
+        ${ss.map(s=>{
+          const late=!s.done&&s.due&&s.due<todayStr();
+          return `<div class="sub ${s.done?'done':''}">
           <button class="check" onclick="App.toggleSub('${t.id}','${s.id}')" aria-label="小タスク完了切替">${CHECK_SVG}</button>
-          <span class="tt">${esc(s.title)}</span>
+          <span class="tt" onclick="App.editSub('${t.id}','${s.id}')" title="クリックで編集">${esc(s.title)}</span>
+          ${s.due?`<span class="subdue ${late?'late':''}">${fmtDate(s.due)}</span>`:''}
           <button class="del" onclick="App.delSub('${t.id}','${s.id}')" aria-label="小タスク削除">×</button>
-        </div>`).join('')}
+        </div>`;}).join('')}
         <div class="sub-add">
-          <input class="field" id="subin-${t.id}" placeholder="小タスクを追加（Enterで確定）" onkeydown="if(event.key==='Enter')App.addSub('${t.id}')">
+          <input class="field" id="subin-${t.id}" placeholder="小タスクを追加（Enterで確定）" onkeydown="if(event.key==='Enter'&&!event.isComposing)App.addSub('${t.id}')">
+          <input class="field" type="date" id="subdate-${t.id}" title="いつやるか（任意）" style="flex:none;width:150px">
           <button class="btn sm ghost" onclick="App.addSub('${t.id}')">追加</button>
         </div>
       </div>`;
@@ -651,10 +658,12 @@ const App = {
     const t=this.state.tasks.find(x=>x.id===taskId); if(!t)return;
     const inp=$('#subin-'+taskId); const title=(inp?inp.value:'').trim();
     if(!title){ toast('小タスク名を入力'); return; }
-    (t.subs=t.subs||[]).push({id:uid(),title,done:false,doneAt:null});
+    const dinp=$('#subdate-'+taskId); const due=(dinp&&dinp.value)||null;
+    (t.subs=t.subs||[]).push({id:uid(),title,done:false,doneAt:null,due});
     if(this.isDone(t)){ t.done=false; t.stage=this.state.stages[1]||this.state.stages[0]; t.doneAt=null; } // 未完の小タスクが増えたら親は未完了に戻す
     this.buildReport(); this.render();
     const again=$('#subin-'+taskId); if(again) again.focus();
+    const dagain=$('#subdate-'+taskId); if(dagain&&due) dagain.value=due; // 同じ日付で連続追加しやすく
   },
   toggleSub(taskId,subId){
     const t=this.state.tasks.find(x=>x.id===taskId); if(!t)return;
@@ -670,6 +679,28 @@ const App = {
     this.syncParent(t);
     this.buildReport(); this.render();
   },
+  editSub(taskId,subId){
+    const t=this.state.tasks.find(x=>x.id===taskId); if(!t)return;
+    const s=(t.subs||[]).find(x=>x.id===subId); if(!s)return;
+    $('#modal').innerHTML=`
+      <h3>小タスクを編集</h3>
+      <label>小タスク名</label>
+      <input class="field" id="esTitle" value="${esc(s.title)}" onkeydown="if(event.key==='Enter'&&!event.isComposing)App.saveSubEdit('${t.id}','${s.id}')">
+      <label>いつやるか（任意）</label>
+      <input class="field" id="esDue" type="date" value="${s.due||''}">
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="App.closeModal()">キャンセル</button>
+        <button class="btn" onclick="App.saveSubEdit('${t.id}','${s.id}')">保存</button>
+      </div>`;
+    openScrim(); setTimeout(()=>$('#esTitle').focus(),50);
+  },
+  saveSubEdit(taskId,subId){
+    const t=this.state.tasks.find(x=>x.id===taskId); if(!t)return;
+    const s=(t.subs||[]).find(x=>x.id===subId); if(!s)return;
+    const title=$('#esTitle').value.trim(); if(!title){ toast('小タスク名を入力'); return; }
+    s.title=title; s.due=$('#esDue').value||null;
+    this.closeModal(); this.buildReport(); this.render();
+  },
   syncParent(t){ // 小タスク全完了→親も完了／未完が残れば親を未完了に戻す
     const ss=t.subs||[]; if(!ss.length) return;
     const all=ss.every(s=>s.done);
@@ -681,7 +712,7 @@ const App = {
     $('#modal').innerHTML=`
       <h3>タスクを編集</h3>
       <label>タスク名</label>
-      <input class="field" id="etTitle" value="${esc(t.title)}" onkeydown="if(event.key==='Enter')App.saveTaskEdit('${t.id}')">
+      <input class="field" id="etTitle" value="${esc(t.title)}" onkeydown="if(event.key==='Enter'&&!event.isComposing)App.saveTaskEdit('${t.id}')">
       <div class="row">
         <div><label>工程</label><select class="field" id="etStage">${this.state.stages.map(s=>`<option ${s===t.stage?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
         <div><label>量（任意）</label><input class="field" id="etEst" type="number" min="0" value="${t.est||''}"></div>
@@ -757,7 +788,7 @@ const App = {
     if(doneLines.length) txt+=`\n✔ 今日やったこと\n`+doneLines.join('\n')+`\n`;
     if(next.length) txt+=`\n▶ 次にやること\n`+next.map(t=>{
       const ns=(t.subs||[]).find(x=>!x.done);
-      return `・${t.title}${ns?`（次：${ns.title}）`:''}`;
+      return `・${t.title}${ns?`（次：${ns.title}${ns.due?`・${fmtDate(ns.due)}`:''}）`:''}`;
     }).join('\n');
     $('#reportBox').textContent=txt;
     return txt;
