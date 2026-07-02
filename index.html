@@ -138,9 +138,9 @@
   .btn:active{transform:translateY(1px)}
 
   .task{
-    display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:12px;padding:12px 4px;border-top:1px solid var(--line);
   }
-  .task:last-child{border-bottom:none}
+  .task:first-child{border-top:none}
   .check{
     width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line-strong);flex:none;
     display:grid;place-items:center;transition:.15s;background:var(--bg);
@@ -159,6 +159,28 @@
   .task .del{opacity:0;color:var(--ink-4);font-size:18px;width:26px;height:26px;border-radius:7px;transition:.15s}
   .task:hover .del{opacity:1}
   .task .del:hover{background:var(--warn-bg);color:var(--warn)}
+  .task .edit{opacity:0;color:var(--ink-4);font-size:13px;width:26px;height:26px;border-radius:7px;transition:.15s;flex:none}
+  .task:hover .edit{opacity:1}
+  .task .edit:hover{background:var(--bg-soft);color:var(--ink)}
+  .task .tt{cursor:pointer}
+  .chev{display:inline-block;width:14px;font-size:10px;color:var(--ink-4);transition:transform .15s;user-select:none}
+  .task.open .chev{transform:rotate(90deg)}
+  .submeta{font-size:11px;font-weight:600;color:var(--ink-2);background:var(--bg-soft);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+
+  /* subtasks */
+  .subwrap{margin:2px 0 10px 30px;border-left:2px solid var(--line);padding-left:14px}
+  .sub{display:flex;align-items:center;gap:10px;padding:6px 2px}
+  .sub .check{width:16px;height:16px;border-radius:5px;flex:none}
+  .sub.done .check{background:var(--ink);border-color:var(--ink)}
+  .sub .check svg{opacity:0;transition:.15s}
+  .sub.done .check svg{opacity:1}
+  .sub .tt{flex:1;font-size:13px;font-weight:500}
+  .sub.done .tt{color:var(--ink-4);text-decoration:line-through;text-decoration-thickness:1.5px}
+  .sub .del{opacity:0;color:var(--ink-4);font-size:15px;width:22px;height:22px;border-radius:6px;transition:.15s;flex:none}
+  .sub:hover .del{opacity:1}
+  .sub .del:hover{background:var(--warn-bg);color:var(--warn)}
+  .sub-add{display:flex;gap:6px;margin:4px 0 2px}
+  .sub-add input{flex:1;padding:7px 10px;font-size:13px}
 
   .empty{text-align:center;padding:48px 20px;color:var(--ink-3)}
   .empty .big{font-size:15px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
@@ -346,6 +368,7 @@ const Store = {
 const App = {
   state:null,
   currentTab:"dash",
+  open:new Set(), // プルダウン展開中のタスクID（保存しないUI状態）
 
   init(){
     this.state = Store.load() || this.fresh();
@@ -390,9 +413,14 @@ const App = {
   stats(){
     const p=this.proj(); const ts=this.projTasks();
     const w = t => Number(t.est)>0 ? Number(t.est) : 1; // 量未設定タスクも重み1で進捗に反映
+    const frac = t => { // 小タスクの消化率で部分カウント（毎日進捗が動く）
+      if(this.isDone(t)) return 1;
+      const ss=t.subs||[]; if(!ss.length) return 0;
+      return ss.filter(s=>s.done).length/ss.length;
+    };
     const useUnits = ts.some(t=>Number(t.est)>0);
     const total = ts.reduce((a,t)=>a+w(t),0);
-    const done  = ts.filter(t=>this.isDone(t)).reduce((a,t)=>a+w(t),0);
+    const done  = ts.reduce((a,t)=>a+w(t)*frac(t),0);
     const remain = Math.max(0, total-done);
     const pct = total>0 ? Math.round(done/total*100) : 0;
     const daysLeft = p ? daysBetween(todayStr(), p.due) : 0;
@@ -465,7 +493,7 @@ const App = {
       <div class="stat ${s.behind?'alert':''}">
         <div class="label">今日のノルマ</div>
         <div class="value">${s.daily}<small>${unit}/日</small></div>
-        <div class="sub">残り ${s.remain}${unit} ${s.behind?'· ペース遅れ':'· 順調'}</div>
+        <div class="sub">残り ${Math.round(s.remain*10)/10}${unit} ${s.behind?'· ペース遅れ':'· 順調'}</div>
       </div>
       <div class="stat">
         <div class="label">連続記録</div>
@@ -531,17 +559,33 @@ const App = {
     }
     // sort: not-done first, by order
     ts=ts.slice().sort((a,b)=> (this.isDone(a)-this.isDone(b)) || (a.order-b.order));
+    const CHECK_SVG=`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L5 9 L10 3" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     list.innerHTML=ts.map(t=>{
       const done=this.isDone(t);
-      return `<div class="task ${done?'done':''}">
-        <button class="check" onclick="App.toggle('${t.id}')" aria-label="完了切替">
-          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L5 9 L10 3" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <span class="tt" onclick="App.editTask('${t.id}')">${esc(t.title)}</span>
+      const ss=t.subs||[];
+      const open=this.open.has(t.id);
+      const subMeta=ss.length?`<span class="submeta">${ss.filter(s=>s.done).length}/${ss.length}</span>`:'';
+      const head=`<div class="task ${done?'done':''} ${open?'open':''}">
+        <button class="check" onclick="App.toggle('${t.id}')" aria-label="完了切替">${CHECK_SVG}</button>
+        <span class="tt" onclick="App.toggleOpen('${t.id}')"><span class="chev">▶</span>${esc(t.title)}</span>
+        ${subMeta}
         <span class="stage" onclick="App.cycleStage('${t.id}')">${esc(t.stage)}</span>
         <span class="meta">${t.est?(t.est+''):'—'}</span>
+        <button class="edit" onclick="App.editTask('${t.id}')" aria-label="編集">✎</button>
         <button class="del" onclick="App.delTask('${t.id}')" aria-label="削除">×</button>
       </div>`;
+      const body=!open?'':`<div class="subwrap">
+        ${ss.map(s=>`<div class="sub ${s.done?'done':''}">
+          <button class="check" onclick="App.toggleSub('${t.id}','${s.id}')" aria-label="小タスク完了切替">${CHECK_SVG}</button>
+          <span class="tt">${esc(s.title)}</span>
+          <button class="del" onclick="App.delSub('${t.id}','${s.id}')" aria-label="小タスク削除">×</button>
+        </div>`).join('')}
+        <div class="sub-add">
+          <input class="field" id="subin-${t.id}" placeholder="小タスクを追加（Enterで確定）" onkeydown="if(event.key==='Enter')App.addSub('${t.id}')">
+          <button class="btn sm ghost" onclick="App.addSub('${t.id}')">追加</button>
+        </div>
+      </div>`;
+      return head+body;
     }).join('');
   },
 
@@ -561,7 +605,7 @@ const App = {
             <button class="btn sm ghost" onclick="App.delTemplate('${tp.id}')">削除</button>
           </div>
         </div>
-        <div class="chips">${tp.tasks.map(t=>`<span class="chip">${esc(t.title)}${t.est?` ·${t.est}`:''}</span>`).join('')}</div>
+        <div class="chips">${tp.tasks.map(t=>`<span class="chip">${esc(t.title)}${t.est?` ·${t.est}`:''}${t.subs&&t.subs.length?`（小${t.subs.length}）`:''}</span>`).join('')}</div>
       </div>`).join('');
   },
 
@@ -575,22 +619,62 @@ const App = {
     $('#ntTitle').value=''; $('#ntEst').value='';
     this.render(); $('#ntTitle').focus();
   },
+  setDone(t,on){ // 親タスクの完了操作は小タスクにも波及させる（唯一の入口）
+    t.done=on;
+    if(on){
+      t.stage=DONE_STAGE; t.doneAt=t.doneAt||todayStr();
+      (t.subs||[]).forEach(s=>{ if(!s.done){ s.done=true; s.doneAt=todayStr(); } });
+      this.logToday();
+    } else {
+      if(t.stage===DONE_STAGE) t.stage=this.state.stages[1]||this.state.stages[0];
+      t.doneAt=null;
+      (t.subs||[]).forEach(s=>{ s.done=false; s.doneAt=null; });
+    }
+  },
   toggle(id){
     const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
-    const now=!this.isDone(t);
-    t.done=now;
-    if(now){ t.stage=DONE_STAGE; t.doneAt=todayStr(); this.logToday(); }
-    else { if(t.stage===DONE_STAGE) t.stage=this.state.stages[1]||this.state.stages[0]; t.doneAt=null; }
+    this.setDone(t,!this.isDone(t));
     this.buildReport(); this.render();
   },
   cycleStage(id){
     const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
     const i=this.state.stages.indexOf(t.stage);
-    t.stage=this.state.stages[(i+1)%this.state.stages.length];
-    t.done=t.stage===DONE_STAGE;
-    t.doneAt=t.done?(t.doneAt||todayStr()):null;
-    if(t.done) this.logToday();
-    this.render();
+    const ns=this.state.stages[(i+1)%this.state.stages.length];
+    if(ns===DONE_STAGE) this.setDone(t,true);
+    else { if(this.isDone(t)) this.setDone(t,false); t.stage=ns; }
+    this.buildReport(); this.render();
+  },
+
+  // ---- subtasks ----
+  toggleOpen(id){ this.open.has(id)?this.open.delete(id):this.open.add(id); this.renderTasks(); },
+  addSub(taskId){
+    const t=this.state.tasks.find(x=>x.id===taskId); if(!t)return;
+    const inp=$('#subin-'+taskId); const title=(inp?inp.value:'').trim();
+    if(!title){ toast('小タスク名を入力'); return; }
+    (t.subs=t.subs||[]).push({id:uid(),title,done:false,doneAt:null});
+    if(this.isDone(t)){ t.done=false; t.stage=this.state.stages[1]||this.state.stages[0]; t.doneAt=null; } // 未完の小タスクが増えたら親は未完了に戻す
+    this.buildReport(); this.render();
+    const again=$('#subin-'+taskId); if(again) again.focus();
+  },
+  toggleSub(taskId,subId){
+    const t=this.state.tasks.find(x=>x.id===taskId); if(!t)return;
+    const s=(t.subs||[]).find(x=>x.id===subId); if(!s)return;
+    s.done=!s.done; s.doneAt=s.done?todayStr():null;
+    if(s.done) this.logToday();
+    this.syncParent(t);
+    this.buildReport(); this.render();
+  },
+  delSub(taskId,subId){
+    const t=this.state.tasks.find(x=>x.id===taskId); if(!t)return;
+    t.subs=(t.subs||[]).filter(x=>x.id!==subId);
+    this.syncParent(t);
+    this.buildReport(); this.render();
+  },
+  syncParent(t){ // 小タスク全完了→親も完了／未完が残れば親を未完了に戻す
+    const ss=t.subs||[]; if(!ss.length) return;
+    const all=ss.every(s=>s.done);
+    if(all && !this.isDone(t)){ t.done=true; t.stage=DONE_STAGE; t.doneAt=todayStr(); this.logToday(); toast('🎉 タスク完了：'+t.title); }
+    else if(!all && this.isDone(t)){ t.done=false; t.stage=this.state.stages[1]||this.state.stages[0]; t.doneAt=null; }
   },
   editTask(id){
     const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
@@ -611,9 +695,10 @@ const App = {
   saveTaskEdit(id){
     const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
     const title=$('#etTitle').value.trim(); if(!title){ toast('タスク名を入力'); return; }
-    t.title=title; t.stage=$('#etStage').value; t.est=Number($('#etEst').value)||0;
-    t.done=t.stage===DONE_STAGE;
-    if(t.done){ t.doneAt=t.doneAt||todayStr(); this.logToday(); } else t.doneAt=null;
+    t.title=title; t.est=Number($('#etEst').value)||0;
+    const ns=$('#etStage').value;
+    if(ns===DONE_STAGE){ if(!this.isDone(t)) this.setDone(t,true); }
+    else { if(this.isDone(t)) this.setDone(t,false); t.stage=ns; }
     this.closeModal(); this.buildReport(); this.render();
   },
   delTask(id){
@@ -634,7 +719,7 @@ const App = {
     const name=prompt("テンプレート名", this.proj().name+" フロー");
     if(!name) return;
     this.state.templates.push({id:uid(),name:name.trim(),
-      tasks:ts.map(t=>({title:t.title,stage:"未着手",est:t.est||0}))});
+      tasks:ts.map(t=>({title:t.title,stage:"未着手",est:t.est||0,subs:(t.subs||[]).map(x=>({title:x.title}))}))});
     this.render(); toast('テンプレに保存しました');
   },
   applyTemplate(id){
@@ -642,7 +727,8 @@ const App = {
     if(!confirm(`「${tp.name}」の${tp.tasks.length}タスクをこのプロジェクトに追加しますか？`)) return;
     let base=Date.now();
     tp.tasks.forEach((t,i)=>this.state.tasks.push({id:uid(),projectId:this.state.activeProjectId,
-      title:t.title,stage:t.stage||"未着手",est:t.est||0,done:false,doneAt:null,order:base+i}));
+      title:t.title,stage:t.stage||"未着手",est:t.est||0,done:false,doneAt:null,order:base+i,
+      subs:(t.subs||[]).map(x=>({id:uid(),title:x.title,done:false,doneAt:null}))}));
     this.tab('tasks'); this.render(); toast(`${tp.tasks.length}タスクを展開`);
   },
   delTemplate(id){
@@ -656,14 +742,23 @@ const App = {
     const p=this.proj(); const s=this.stats();
     const ts=this.projTasks();
     const doneToday=ts.filter(t=>this.isDone(t)&&t.doneAt===todayStr());
+    const subToday=[]; // 親は未完了でも、今日終わらせた小タスクは報告に載せる
+    ts.forEach(t=>{
+      if(this.isDone(t)&&t.doneAt===todayStr()) return;
+      (t.subs||[]).forEach(x=>{ if(x.done&&x.doneAt===todayStr()) subToday.push(`${t.title} › ${x.title}`); });
+    });
     const next=ts.filter(t=>!this.isDone(t)).slice(0,3);
     const unit=(p&&p.unit)||'件';
     const bar='█'.repeat(Math.round(s.pct/10))+'░'.repeat(10-Math.round(s.pct/10));
     let txt=`📘 ${p?p.name:''} 進捗報告（${fmtDate(todayStr())}）\n`;
     txt+=`${bar} ${s.pct}%\n`;
     txt+=(s.daysLeft<0?`締切超過 ${-s.daysLeft}日 🚨`:`締切まで ${s.daysLeft}日`)+` / 今日のノルマ ${s.daily}${unit} ${s.behind?'⚠️遅れ':'✅順調'}\n`;
-    if(doneToday.length) txt+=`\n✔ 今日やったこと\n`+doneToday.map(t=>`・${t.title}`).join('\n')+`\n`;
-    if(next.length) txt+=`\n▶ 次にやること\n`+next.map(t=>`・${t.title}`).join('\n');
+    const doneLines=[...doneToday.map(t=>`・${t.title}`), ...subToday.map(x=>`・${x}`)];
+    if(doneLines.length) txt+=`\n✔ 今日やったこと\n`+doneLines.join('\n')+`\n`;
+    if(next.length) txt+=`\n▶ 次にやること\n`+next.map(t=>{
+      const ns=(t.subs||[]).find(x=>!x.done);
+      return `・${t.title}${ns?`（次：${ns.title}）`:''}`;
+    }).join('\n');
     $('#reportBox').textContent=txt;
     return txt;
   },
@@ -718,7 +813,8 @@ const App = {
     if(tplId){
       const tp=this.state.templates.find(x=>x.id===tplId);
       if(tp){ let base=Date.now(); tp.tasks.forEach((t,i)=>this.state.tasks.push(
-        {id:uid(),projectId:pid,title:t.title,stage:t.stage||"未着手",est:t.est||0,done:false,doneAt:null,order:base+i})); }
+        {id:uid(),projectId:pid,title:t.title,stage:t.stage||"未着手",est:t.est||0,done:false,doneAt:null,order:base+i,
+         subs:(t.subs||[]).map(x=>({id:uid(),title:x.title,done:false,doneAt:null}))})); }
     }
     this.closeModal(); this.buildReport(); this.tab('dash'); this.render(); toast('プロジェクトを作成');
   },
