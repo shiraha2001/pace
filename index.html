@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Pace" />
+<title>Pace — 制作プロジェクト管理</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --bg-soft:#fafafa;
+    --bg-elev:#ffffff;
+    --line:#ececec;
+    --line-strong:#e0e0e0;
+    --ink:#111111;
+    --ink-2:#444444;
+    --ink-3:#8a8a8a;
+    --ink-4:#b8b8b8;
+    --accent:#111111;
+    --good:#1f9d55;
+    --good-bg:#eaf7ef;
+    --warn:#c2410c;
+    --warn-bg:#fdf1ea;
+    --radius:14px;
+    --radius-sm:10px;
+    --shadow:0 1px 2px rgba(17,17,17,.04), 0 8px 24px rgba(17,17,17,.05);
+    --font:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Helvetica Neue",Arial,"Yu Gothic",Meiryo,sans-serif;
+    --mono:"SF Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font);
+    background:var(--bg);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.55;
+    letter-spacing:.01em;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
+  ::selection{background:#111;color:#fff}
+
+  /* ---------- layout ---------- */
+  .app{max-width:980px;margin:0 auto;padding:0 20px 120px}
+  header.top{
+    position:sticky;top:0;z-index:30;background:rgba(255,255,255,.82);
+    backdrop-filter:saturate(180%) blur(14px);
+    border-bottom:1px solid var(--line);
+    margin:0 -20px 0;padding:0 20px;
+  }
+  .top-inner{max-width:980px;margin:0 auto;display:flex;align-items:center;gap:14px;height:60px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.02em;font-size:17px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--ink);display:inline-block}
+  .brand small{font-weight:500;color:var(--ink-3);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  .top-spacer{flex:1}
+
+  .proj-select{
+    display:flex;align-items:center;gap:8px;border:1px solid var(--line-strong);
+    border-radius:999px;padding:7px 8px 7px 14px;background:var(--bg);font-size:13px;font-weight:600;
+  }
+  .proj-select select{border:none;background:none;font-weight:600;font-size:13px;cursor:pointer;max-width:180px}
+  .proj-select select:focus{outline:none}
+  .icon-btn{
+    width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+    border:1px solid var(--line);color:var(--ink-2);background:var(--bg);transition:.15s;
+  }
+  .icon-btn:hover{background:var(--bg-soft);color:var(--ink)}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex;gap:2px;margin:22px 0 24px;border-bottom:1px solid var(--line)}
+  .tab{
+    padding:10px 16px;font-size:14px;font-weight:600;color:var(--ink-3);
+    border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s;border-radius:6px 6px 0 0;
+  }
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--ink);border-bottom-color:var(--ink)}
+
+  /* ---------- stat cards ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+  .stat{
+    border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 14px;background:var(--bg-elev);
+    position:relative;overflow:hidden;
+  }
+  .stat .label{font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+  .stat .value{font-size:30px;font-weight:760;letter-spacing:-.03em;margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
+  .stat .value small{font-size:14px;font-weight:600;color:var(--ink-3);letter-spacing:0}
+  .stat .sub{font-size:12px;color:var(--ink-3);margin-top:7px}
+  .stat.alert .value{color:var(--warn)}
+
+  /* ---------- progress / section ---------- */
+  .card{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev);padding:20px;margin-bottom:16px}
+  .card-h{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .card-h h2{font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .card-h .muted{font-size:12px;color:var(--ink-3);font-weight:500}
+  .card-h .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+  .bar{height:10px;border-radius:999px;background:#f0f0f0;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--ink);border-radius:999px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+  .pacerow{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:8px}
+
+  /* burndown svg */
+  .chart{width:100%;height:160px;display:block}
+  .chart .grid line{stroke:var(--line);stroke-width:1}
+  .chart .ideal{stroke:var(--ink-4);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+  .chart .actual{stroke:var(--ink);stroke-width:2.5;fill:none;stroke-linejoin:round;stroke-linecap:round}
+  .chart .area{fill:rgba(17,17,17,.05)}
+  .chart text{font-size:10px;fill:var(--ink-3);font-family:var(--mono)}
+  .chart .dot{fill:var(--ink)}
+
+  .legend{display:flex;gap:16px;font-size:11px;color:var(--ink-3);margin-top:6px}
+  .legend i{display:inline-block;width:14px;height:0;border-top:2px solid var(--ink);margin-right:6px;vertical-align:middle}
+  .legend .id{border-top:2px dashed var(--ink-4)}
+
+  /* ---------- tasks ---------- */
+  .stagecol{margin-bottom:8px}
+  .add-row{display:flex;gap:8px;margin-bottom:16px}
+  .add-row input.title{flex:1}
+  .field{
+    border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:10px 12px;background:var(--bg);
+    transition:.15s;width:100%;
+  }
+  .field:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(17,17,17,.06)}
+  select.field{cursor:pointer}
+  .est{width:96px;flex:none}
+
+  .btn{
+    border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:var(--radius-sm);
+    padding:10px 16px;font-size:13px;font-weight:650;transition:.15s;white-space:nowrap;
+  }
+  .btn:hover{opacity:.86}
+  .btn.ghost{background:var(--bg);color:var(--ink);border-color:var(--line-strong)}
+  .btn.ghost:hover{background:var(--bg-soft);opacity:1}
+  .btn.sm{padding:7px 12px;font-size:12px}
+  .btn:active{transform:translateY(1px)}
+
+  .task{
+    display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);
+  }
+  .task:last-child{border-bottom:none}
+  .check{
+    width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line-strong);flex:none;
+    display:grid;place-items:center;transition:.15s;background:var(--bg);
+  }
+  .check:hover{border-color:var(--ink)}
+  .task.done .check{background:var(--ink);border-color:var(--ink)}
+  .check svg{opacity:0;transition:.15s}
+  .task.done .check svg{opacity:1}
+  .task .tt{flex:1;font-size:14px;font-weight:550}
+  .task.done .tt{color:var(--ink-4);text-decoration:line-through;text-decoration-thickness:1.5px}
+  .task .stage{
+    font-size:11px;font-weight:600;color:var(--ink-2);background:var(--bg-soft);
+    border:1px solid var(--line);border-radius:999px;padding:3px 10px;cursor:pointer;
+  }
+  .task .meta{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
+  .task .del{opacity:0;color:var(--ink-4);font-size:18px;width:26px;height:26px;border-radius:7px;transition:.15s}
+  .task:hover .del{opacity:1}
+  .task .del:hover{background:var(--warn-bg);color:var(--warn)}
+
+  .empty{text-align:center;padding:48px 20px;color:var(--ink-3)}
+  .empty .big{font-size:15px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+
+  /* templates */
+  .tpl{border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+  .tpl-h{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .tpl-h .name{font-weight:700;font-size:14px}
+  .tpl-h .count{font-size:12px;color:var(--ink-3)}
+  .tpl-h .right{margin-left:auto;display:flex;gap:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--ink-2)}
+
+  /* report / line */
+  .report-box{font-family:var(--mono);font-size:12.5px;white-space:pre-wrap;background:var(--bg-soft);
+    border:1px solid var(--line);border-radius:var(--radius-sm);padding:14px;color:var(--ink-2);line-height:1.7}
+
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(17,17,17,.32);backdrop-filter:blur(2px);z-index:50;display:none;place-items:center;padding:20px}
+  .scrim.open{display:grid}
+  .modal{background:var(--bg);border-radius:18px;box-shadow:var(--shadow);width:100%;max-width:440px;padding:24px;animation:pop .2s ease}
+  @keyframes pop{from{transform:scale(.97) translateY(6px);opacity:0}to{transform:none;opacity:1}}
+  .modal h3{font-size:16px;font-weight:750;margin-bottom:4px;letter-spacing:-.01em}
+  .modal p.hint{font-size:12.5px;color:var(--ink-3);margin-bottom:18px}
+  .modal label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin:14px 0 6px}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:22px}
+
+  .toast{
+    position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:11px 18px;border-radius:999px;font-size:13px;font-weight:600;
+    opacity:0;transition:.25s;z-index:80;pointer-events:none;box-shadow:var(--shadow);
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .hide{display:none !important}
+  .row{display:flex;gap:10px}
+  .row > *{flex:1}
+  .note{font-size:12px;color:var(--ink-3);line-height:1.6}
+  a.link{color:var(--ink);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+
+  @media(max-width:680px){
+    .stats{grid-template-columns:1fr 1fr}
+    .stat .value{font-size:26px}
+    .add-row{flex-wrap:wrap}
+    .add-row input.title{flex:1 1 100%}
+    .proj-select select{max-width:110px}
+    .brand small{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><span class="dot"></span>Pace <small>制作管理</small></div>
+    <div class="top-spacer"></div>
+    <div class="proj-select">
+      <select id="projSelect" onchange="App.switchProject(this.value)"></select>
+      <button class="icon-btn" title="新規プロジェクト" onclick="App.openProjectModal()">+</button>
+    </div>
+    <button class="icon-btn" title="プロジェクト設定" onclick="App.openProjectSettings()">⋯</button>
+    <button class="icon-btn" title="バックアップ / 復元" onclick="App.openDataModal()">⤓</button>
+  </div>
+</header>
+
+<div class="app">
+  <div class="tabs">
+    <button class="tab active" data-tab="dash" onclick="App.tab('dash')">ダッシュボード</button>
+    <button class="tab" data-tab="tasks" onclick="App.tab('tasks')">タスク</button>
+    <button class="tab" data-tab="tpl" onclick="App.tab('tpl')">テンプレート</button>
+  </div>
+
+  <!-- ========== DASHBOARD ========== -->
+  <section id="tab-dash">
+    <div class="stats" id="stats"></div>
+
+    <div class="card">
+      <div class="card-h">
+        <h2>進捗ペース</h2><span class="muted" id="paceMuted"></span>
+      </div>
+      <div id="burndown"></div>
+      <div class="legend"><span><i></i>実績の残量</span><span><i class="id"></i>理想ペース</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h2>今日の報告</h2><span class="muted">LINE/Slackに貼るだけ</span>
+        <div class="right">
+          <button class="btn sm ghost" onclick="App.buildReport()">再生成</button>
+          <button class="btn sm" onclick="App.copyReport()">コピー</button>
+        </div>
+      </div>
+      <div class="report-box" id="reportBox">「再生成」を押すと今日の進捗報告テキストを作ります。</div>
+      <p class="note" style="margin-top:12px">
+        このテキストをLINEグループに貼れば、infraゼロで今日から進捗共有が回ります。<br>
+        将来この送信を<b>毎朝自動</b>にするには LINE Messaging API 連携（フェーズ2）が必要です。
+      </p>
+    </div>
+  </section>
+
+  <!-- ========== TASKS ========== -->
+  <section id="tab-tasks" class="hide">
+    <div class="card">
+      <div class="card-h"><h2>タスクを追加</h2><span class="muted">量(任意)は語数/ページ/節など何でも</span></div>
+      <div class="add-row">
+        <input class="field title" id="ntTitle" placeholder="例）第3章 ドラフト執筆" onkeydown="if(event.key==='Enter')App.addTask()">
+        <select class="field" id="ntStage" style="flex:none;width:120px"></select>
+        <input class="field est" id="ntEst" type="number" min="0" placeholder="量">
+        <button class="btn" onclick="App.addTask()">追加</button>
+      </div>
+      <div class="row" style="align-items:center">
+        <span class="note">よく使う工程はテンプレ化 →</span>
+        <button class="btn ghost sm" style="flex:none" onclick="App.saveAsTemplate()">現在のタスクをテンプレに保存</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h2>タスク</h2><span class="muted" id="taskCount"></span>
+        <div class="right">
+          <select class="field sm" id="filterStage" style="padding:7px 10px;font-size:12px" onchange="App.render()"></select>
+        </div>
+      </div>
+      <div id="taskList"></div>
+    </div>
+  </section>
+
+  <!-- ========== TEMPLATES ========== -->
+  <section id="tab-tpl" class="hide">
+    <div class="card">
+      <div class="card-h"><h2>テンプレート</h2><span class="muted">繰り返す工程をストック→新プロジェクトに流し込み</span></div>
+      <p class="note" style="margin-bottom:14px">
+        本を書くたびに同じ工程（構成→執筆→校正→入稿…）を繰り返すなら、ここに保存しておけば次回ワンタップで全タスクを展開できます。
+      </p>
+      <div id="tplList"></div>
+    </div>
+  </section>
+</div>
+
+<!-- modals -->
+<div class="scrim" id="scrim">
+  <div class="modal" id="modal"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2,9);
+const pad2 = n => String(n).padStart(2,'0');
+const isoLocal = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const todayStr = () => isoLocal(new Date()); // ローカル日付。toISOString()だとJSTの午前9時まで前日扱いになる
+const fmtDate = d => { const x=new Date(d+'T00:00:00'); return `${x.getMonth()+1}/${x.getDate()}`; };
+const daysBetween = (a,b) => Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000);
+
+const DEFAULT_STAGES = ["未着手","執筆中","校正","完了"];
+const DONE_STAGE = "完了";
+
+const SEED_TEMPLATE = {
+  id: uid(), name:"書籍制作・標準フロー",
+  tasks:[
+    {title:"全体構成・目次の設計", stage:"未着手", est:1},
+    {title:"リサーチ・素材集め", stage:"未着手", est:1},
+    {title:"初稿執筆", stage:"未着手", est:10},
+    {title:"自己校正（通読）", stage:"未着手", est:1},
+    {title:"第三者レビュー反映", stage:"未着手", est:1},
+    {title:"figure/図版作成", stage:"未着手", est:3},
+    {title:"表紙制作", stage:"未着手", est:1},
+    {title:"帯制作", stage:"未着手", est:1},
+    {title:"追加コンテンツ制作", stage:"未着手", est:1},
+    {title:"コラム／折込制作", stage:"未着手", est:1},
+    {title:"入稿データ整備", stage:"未着手", est:1},
+  ]
+};
+
+const Store = {
+  key:"pace.v1",
+  load(){
+    try{ const d=JSON.parse(localStorage.getItem(this.key)); if(d&&d.projects) return d; }catch(e){}
+    return null;
+  },
+  save(s){ localStorage.setItem(this.key, JSON.stringify(s)); }
+};
+
+const App = {
+  state:null,
+  currentTab:"dash",
+
+  init(){
+    this.state = Store.load() || this.fresh();
+    this.migrate();
+    this.buildReport();
+    this.render();
+  },
+  migrate(){
+    // v2: 標準フローに制作系4タスクを追加（保存済みデータにも一度だけ反映）
+    if((this.state.v||1) < 2){
+      const tp=(this.state.templates||[]).find(t=>t.name===SEED_TEMPLATE.name);
+      if(tp){
+        const add=["表紙制作","帯制作","追加コンテンツ制作","コラム／折込制作"]
+          .filter(x=>!tp.tasks.some(t=>t.title===x))
+          .map(x=>({title:x,stage:"未着手",est:1}));
+        const i=tp.tasks.findIndex(t=>t.title==="入稿データ整備");
+        i>=0 ? tp.tasks.splice(i,0,...add) : tp.tasks.push(...add);
+      }
+      this.state.v=2;
+    }
+  },
+  fresh(){
+    const pid = uid();
+    const today = todayStr();
+    const due = new Date(); due.setDate(due.getDate()+90);
+    return {
+      activeProjectId: pid,
+      projects:[{id:pid, name:"はじめてのプロジェクト", start:today, due:isoLocal(due), unit:""}],
+      tasks:[],
+      templates:[ SEED_TEMPLATE ],
+      logs:[],
+      stages: DEFAULT_STAGES.slice(),
+    };
+  },
+  persist(){ Store.save(this.state); },
+
+  // ---- helpers ----
+  proj(){ return this.state.projects.find(p=>p.id===this.state.activeProjectId) || this.state.projects[0]; },
+  projTasks(){ return this.state.tasks.filter(t=>t.projectId===this.state.activeProjectId); },
+  isDone(t){ return t.done || t.stage===DONE_STAGE; },
+
+  stats(){
+    const p=this.proj(); const ts=this.projTasks();
+    const w = t => Number(t.est)>0 ? Number(t.est) : 1; // 量未設定タスクも重み1で進捗に反映
+    const useUnits = ts.some(t=>Number(t.est)>0);
+    const total = ts.reduce((a,t)=>a+w(t),0);
+    const done  = ts.filter(t=>this.isDone(t)).reduce((a,t)=>a+w(t),0);
+    const remain = Math.max(0, total-done);
+    const pct = total>0 ? Math.round(done/total*100) : 0;
+    const daysLeft = p ? daysBetween(todayStr(), p.due) : 0;
+    const totalDays = p ? Math.max(1, daysBetween(p.start, p.due)) : 1;
+    const elapsed = p ? Math.min(totalDays, Math.max(0, daysBetween(p.start, todayStr()))) : 0;
+    const daily = daysLeft>0 ? Math.ceil(remain/daysLeft) : remain;
+    // ideal done by now
+    const idealDone = total * (elapsed/totalDays);
+    const behind = done < idealDone - 0.0001;
+    return {total,done,remain,pct,daysLeft,totalDays,elapsed,daily,behind,useUnits,idealDone};
+  },
+
+  streak(){
+    const days = new Set(this.state.logs.filter(l=>l.projectId===this.state.activeProjectId).map(l=>l.date));
+    let n=0; let d=new Date();
+    // count back from today (or yesterday if today not logged yet)
+    if(!days.has(todayStr())) d.setDate(d.getDate()-1);
+    while(days.has(isoLocal(d))){ n++; d.setDate(d.getDate()-1); }
+    return n;
+  },
+
+  // ---- tabs ----
+  tab(name){
+    this.currentTab=name;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+    ['dash','tasks','tpl'].forEach(t=> $('#tab-'+t).classList.toggle('hide', t!==name));
+    if(name==='dash') this.renderBurndown(); // 非表示中はclientWidthが取れないため表示時に再描画
+  },
+
+  switchProject(id){ this.state.activeProjectId=id; this.persist(); this.buildReport(); this.render(); },
+
+  // ---- render ----
+  render(){
+    // project select
+    const sel=$('#projSelect');
+    sel.innerHTML=this.state.projects.map(p=>`<option value="${p.id}" ${p.id===this.state.activeProjectId?'selected':''}>${esc(p.name)}</option>`).join('');
+    // stage selects（再描画で選択値が戻らないよう保持）
+    const opts=this.state.stages.map(s=>`<option>${esc(s)}</option>`).join('');
+    const nt=$('#ntStage'), fs=$('#filterStage');
+    const ntPrev=nt.value, fsPrev=fs.value;
+    nt.innerHTML=opts;
+    if(this.state.stages.includes(ntPrev)) nt.value=ntPrev;
+    fs.innerHTML=`<option value="">全工程</option>`+opts;
+    fs.value=this.state.stages.includes(fsPrev)?fsPrev:'';
+
+    this.renderStats();
+    this.renderBurndown();
+    this.renderTasks();
+    this.renderTemplates();
+    this.persist();
+  },
+
+  renderStats(){
+    const s=this.stats(); const p=this.proj();
+    const unit=esc((p&&p.unit)||'件');
+    const overdue=s.daysLeft<0;
+    const dueWarn=s.daysLeft<=7;
+    const stk=this.streak();
+    $('#stats').innerHTML=`
+      <div class="stat">
+        <div class="label">進捗</div>
+        <div class="value">${s.pct}<small>%</small></div>
+        <div class="bar" style="margin-top:10px"><i style="width:${s.pct}%"></i></div>
+      </div>
+      <div class="stat ${dueWarn?'alert':''}">
+        <div class="label">${overdue?'締切超過':'締切まで'}</div>
+        <div class="value">${overdue?-s.daysLeft:s.daysLeft}<small>日</small></div>
+        <div class="sub">${p? fmtDate(p.due):''} 〆 / 全${s.totalDays}日</div>
+      </div>
+      <div class="stat ${s.behind?'alert':''}">
+        <div class="label">今日のノルマ</div>
+        <div class="value">${s.daily}<small>${unit}/日</small></div>
+        <div class="sub">残り ${s.remain}${unit} ${s.behind?'· ペース遅れ':'· 順調'}</div>
+      </div>
+      <div class="stat">
+        <div class="label">連続記録</div>
+        <div class="value">${stk}<small>日</small></div>
+        <div class="sub">${stk>0?'継続中 🔥':'今日から再開しよう'}</div>
+      </div>`;
+    const m=$('#paceMuted');
+    m.textContent = overdue ? `締切を過ぎています — 設定からリスケしましょう`
+      : s.behind ? `理想より遅れ気味 — 1日 ${s.daily}${(p&&p.unit)||'件'} で巻き返し` : `このペースなら間に合います`;
+  },
+
+  renderBurndown(){
+    const p=this.proj(); const s=this.stats();
+    const box=$('#burndown');
+    const W=Math.max(320, box.clientWidth||900), H=160, pad={l:34,r:12,t:14,b:22}; // 実幅で描画（文字の歪み防止）
+    const total=s.total||1;
+    const totalDays=s.totalDays;
+    const x = d => pad.l + (W-pad.l-pad.r)*(d/totalDays);
+    const y = v => pad.t + (H-pad.t-pad.b)*(1 - v/total);
+    // ideal line: total -> 0
+    const ideal=`M ${x(0)} ${y(total)} L ${x(totalDays)} ${y(0)}`;
+    // actual: remaining over time from logs (cumulative done by date)
+    const logs=this.state.logs.filter(l=>l.projectId===p.id).sort((a,b)=>a.date<b.date?-1:1);
+    // build cumulative remaining by snapshot of done at each log date — approximate using current tasks doneAt
+    const ts=this.projTasks();
+    const doneEvents = ts.filter(t=>this.isDone(t)&&t.doneAt).map(t=>({date:t.doneAt.slice(0,10), v:(s.useUnits?(Number(t.est)||0):1)}));
+    doneEvents.sort((a,b)=>a.date<b.date?-1:1);
+    let pts=[{d:0,v:total}]; let acc=0;
+    const startD=p.start;
+    doneEvents.forEach(e=>{ acc+=e.v; const dd=Math.max(0,Math.min(totalDays,daysBetween(startD,e.date))); pts.push({d:dd,v:Math.max(0,total-acc)}); });
+    // current point at today
+    const todayD=Math.max(0,Math.min(totalDays,daysBetween(startD,todayStr())));
+    pts.push({d:todayD,v:s.remain});
+    // dedupe by ascending d
+    pts=pts.filter((pt,i)=> i===0 || pt.d>=pts[i-1].d);
+    const actualPath = pts.map((pt,i)=>`${i?'L':'M'} ${x(pt.d).toFixed(1)} ${y(pt.v).toFixed(1)}`).join(' ');
+    const areaPath = actualPath+` L ${x(pts[pts.length-1].d).toFixed(1)} ${y(0)} L ${x(0)} ${y(0)} Z`;
+    const last=pts[pts.length-1];
+    const gridY=[0,.5,1].map(f=>`<line x1="${pad.l}" x2="${W-pad.r}" y1="${pad.t+(H-pad.t-pad.b)*f}" y2="${pad.t+(H-pad.t-pad.b)*f}"/>`).join('');
+    box.innerHTML=`
+      <svg class="chart" viewBox="0 0 ${W} ${H}">
+        <g class="grid">${gridY}</g>
+        <text x="2" y="${pad.t+4}">${total}</text>
+        <text x="2" y="${H-pad.b}">0</text>
+        <text x="${pad.l}" y="${H-6}">${fmtDate(p.start)}</text>
+        <text x="${W-pad.r}" y="${H-6}" text-anchor="end">${fmtDate(p.due)}</text>
+        <path class="ideal" d="${ideal}"/>
+        <path class="area" d="${areaPath}"/>
+        <path class="actual" d="${actualPath}"/>
+        <circle class="dot" cx="${x(last.d).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="3.5"/>
+      </svg>`;
+  },
+
+  renderTasks(){
+    const filter=$('#filterStage')?$('#filterStage').value:'';
+    let ts=this.projTasks();
+    $('#taskCount').textContent=`${ts.filter(t=>this.isDone(t)).length}/${ts.length} 完了`;
+    if(filter) ts=ts.filter(t=>t.stage===filter);
+    const list=$('#taskList');
+    if(ts.length===0){
+      list.innerHTML=`<div class="empty"><div class="big">タスクがありません</div>上のフォームから追加するか、テンプレートを展開してください。</div>`;
+      return;
+    }
+    // sort: not-done first, by order
+    ts=ts.slice().sort((a,b)=> (this.isDone(a)-this.isDone(b)) || (a.order-b.order));
+    list.innerHTML=ts.map(t=>{
+      const done=this.isDone(t);
+      return `<div class="task ${done?'done':''}">
+        <button class="check" onclick="App.toggle('${t.id}')" aria-label="完了切替">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L5 9 L10 3" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="tt" onclick="App.editTask('${t.id}')">${esc(t.title)}</span>
+        <span class="stage" onclick="App.cycleStage('${t.id}')">${esc(t.stage)}</span>
+        <span class="meta">${t.est?(t.est+''):'—'}</span>
+        <button class="del" onclick="App.delTask('${t.id}')" aria-label="削除">×</button>
+      </div>`;
+    }).join('');
+  },
+
+  renderTemplates(){
+    const list=$('#tplList');
+    if(this.state.templates.length===0){
+      list.innerHTML=`<div class="empty"><div class="big">テンプレートなし</div>タスク画面で「現在のタスクをテンプレに保存」できます。</div>`;
+      return;
+    }
+    list.innerHTML=this.state.templates.map(tp=>`
+      <div class="tpl">
+        <div class="tpl-h">
+          <span class="name">${esc(tp.name)}</span>
+          <span class="count">${tp.tasks.length}タスク</span>
+          <div class="right">
+            <button class="btn sm" onclick="App.applyTemplate('${tp.id}')">このプロジェクトに展開</button>
+            <button class="btn sm ghost" onclick="App.delTemplate('${tp.id}')">削除</button>
+          </div>
+        </div>
+        <div class="chips">${tp.tasks.map(t=>`<span class="chip">${esc(t.title)}${t.est?` ·${t.est}`:''}</span>`).join('')}</div>
+      </div>`).join('');
+  },
+
+  // ---- task actions ----
+  addTask(){
+    const title=$('#ntTitle').value.trim(); if(!title){ toast('タイトルを入力'); return; }
+    const stage=$('#ntStage').value, est=Number($('#ntEst').value)||0;
+    this.state.tasks.push({id:uid(),projectId:this.state.activeProjectId,title,stage,est,
+      done:stage===DONE_STAGE, doneAt:stage===DONE_STAGE?todayStr():null,
+      order:Date.now()});
+    $('#ntTitle').value=''; $('#ntEst').value='';
+    this.render(); $('#ntTitle').focus();
+  },
+  toggle(id){
+    const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
+    const now=!this.isDone(t);
+    t.done=now;
+    if(now){ t.stage=DONE_STAGE; t.doneAt=todayStr(); this.logToday(); }
+    else { if(t.stage===DONE_STAGE) t.stage=this.state.stages[1]||this.state.stages[0]; t.doneAt=null; }
+    this.buildReport(); this.render();
+  },
+  cycleStage(id){
+    const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
+    const i=this.state.stages.indexOf(t.stage);
+    t.stage=this.state.stages[(i+1)%this.state.stages.length];
+    t.done=t.stage===DONE_STAGE;
+    t.doneAt=t.done?(t.doneAt||todayStr()):null;
+    if(t.done) this.logToday();
+    this.render();
+  },
+  editTask(id){
+    const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
+    $('#modal').innerHTML=`
+      <h3>タスクを編集</h3>
+      <label>タスク名</label>
+      <input class="field" id="etTitle" value="${esc(t.title)}" onkeydown="if(event.key==='Enter')App.saveTaskEdit('${t.id}')">
+      <div class="row">
+        <div><label>工程</label><select class="field" id="etStage">${this.state.stages.map(s=>`<option ${s===t.stage?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        <div><label>量（任意）</label><input class="field" id="etEst" type="number" min="0" value="${t.est||''}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="App.closeModal()">キャンセル</button>
+        <button class="btn" onclick="App.saveTaskEdit('${t.id}')">保存</button>
+      </div>`;
+    openScrim(); setTimeout(()=>$('#etTitle').focus(),50);
+  },
+  saveTaskEdit(id){
+    const t=this.state.tasks.find(x=>x.id===id); if(!t)return;
+    const title=$('#etTitle').value.trim(); if(!title){ toast('タスク名を入力'); return; }
+    t.title=title; t.stage=$('#etStage').value; t.est=Number($('#etEst').value)||0;
+    t.done=t.stage===DONE_STAGE;
+    if(t.done){ t.doneAt=t.doneAt||todayStr(); this.logToday(); } else t.doneAt=null;
+    this.closeModal(); this.buildReport(); this.render();
+  },
+  delTask(id){
+    const t=this.state.tasks.find(x=>x.id===id);
+    if(!confirm(`「${t?t.title:''}」を削除しますか？`)) return;
+    this.state.tasks=this.state.tasks.filter(x=>x.id!==id); this.render();
+  },
+  logToday(){
+    const d=todayStr();
+    if(!this.state.logs.some(l=>l.date===d && l.projectId===this.state.activeProjectId))
+      this.state.logs.push({id:uid(),projectId:this.state.activeProjectId,date:d});
+  },
+
+  // ---- templates ----
+  saveAsTemplate(){
+    const ts=this.projTasks();
+    if(ts.length===0){ toast('保存するタスクがありません'); return; }
+    const name=prompt("テンプレート名", this.proj().name+" フロー");
+    if(!name) return;
+    this.state.templates.push({id:uid(),name:name.trim(),
+      tasks:ts.map(t=>({title:t.title,stage:"未着手",est:t.est||0}))});
+    this.render(); toast('テンプレに保存しました');
+  },
+  applyTemplate(id){
+    const tp=this.state.templates.find(x=>x.id===id); if(!tp)return;
+    if(!confirm(`「${tp.name}」の${tp.tasks.length}タスクをこのプロジェクトに追加しますか？`)) return;
+    let base=Date.now();
+    tp.tasks.forEach((t,i)=>this.state.tasks.push({id:uid(),projectId:this.state.activeProjectId,
+      title:t.title,stage:t.stage||"未着手",est:t.est||0,done:false,doneAt:null,order:base+i}));
+    this.tab('tasks'); this.render(); toast(`${tp.tasks.length}タスクを展開`);
+  },
+  delTemplate(id){
+    const tp=this.state.templates.find(x=>x.id===id);
+    if(!confirm(`テンプレ「${tp?tp.name:''}」を削除しますか？`)) return;
+    this.state.templates=this.state.templates.filter(x=>x.id!==id); this.render();
+  },
+
+  // ---- report ----
+  buildReport(){
+    const p=this.proj(); const s=this.stats();
+    const ts=this.projTasks();
+    const doneToday=ts.filter(t=>this.isDone(t)&&t.doneAt===todayStr());
+    const next=ts.filter(t=>!this.isDone(t)).slice(0,3);
+    const unit=(p&&p.unit)||'件';
+    const bar='█'.repeat(Math.round(s.pct/10))+'░'.repeat(10-Math.round(s.pct/10));
+    let txt=`📘 ${p?p.name:''} 進捗報告（${fmtDate(todayStr())}）\n`;
+    txt+=`${bar} ${s.pct}%\n`;
+    txt+=(s.daysLeft<0?`締切超過 ${-s.daysLeft}日 🚨`:`締切まで ${s.daysLeft}日`)+` / 今日のノルマ ${s.daily}${unit} ${s.behind?'⚠️遅れ':'✅順調'}\n`;
+    if(doneToday.length) txt+=`\n✔ 今日やったこと\n`+doneToday.map(t=>`・${t.title}`).join('\n')+`\n`;
+    if(next.length) txt+=`\n▶ 次にやること\n`+next.map(t=>`・${t.title}`).join('\n');
+    $('#reportBox').textContent=txt;
+    return txt;
+  },
+  copyReport(){
+    const txt=this.buildReport();
+    const ok=()=>toast('コピーしました — LINEに貼り付け');
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(txt).then(ok, ()=>this.copyFallback(txt,ok));
+    } else this.copyFallback(txt,ok);
+  },
+  copyFallback(txt,ok){ // file://直開きなどclipboard APIが使えない環境向け
+    const ta=document.createElement('textarea');
+    ta.value=txt; ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try{ document.execCommand('copy') ? ok() : toast('コピー失敗 — テキストを手動で選択してください'); }
+    catch(e){ toast('コピー失敗 — テキストを手動で選択してください'); }
+    ta.remove();
+  },
+
+  // ---- project modal ----
+  openProjectModal(){
+    const today=todayStr();
+    const due=new Date(); due.setDate(due.getDate()+90);
+    $('#modal').innerHTML=`
+      <h3>新規プロジェクト</h3>
+      <p class="hint">本・記事・教材など、3〜4ヶ月スパンの制作物を1つ作ります。</p>
+      <label>プロジェクト名</label>
+      <input class="field" id="mpName" placeholder="例）英文法 単語帳 第2弾">
+      <div class="row">
+        <div><label>開始日</label><input class="field" id="mpStart" type="date" value="${today}"></div>
+        <div><label>締切</label><input class="field" id="mpDue" type="date" value="${isoLocal(due)}"></div>
+      </div>
+      <label>テンプレートから始める（任意）</label>
+      <select class="field" id="mpTpl"><option value="">空のプロジェクト</option>
+        ${this.state.templates.map(t=>`<option value="${t.id}">${esc(t.name)}（${t.tasks.length}）</option>`).join('')}
+      </select>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="App.closeModal()">キャンセル</button>
+        <button class="btn" onclick="App.createProject()">作成</button>
+      </div>`;
+    openScrim(); setTimeout(()=>$('#mpName').focus(),50);
+  },
+  createProject(){
+    const name=$('#mpName').value.trim()||"新規プロジェクト";
+    let start=$('#mpStart').value||todayStr();
+    let due=$('#mpDue').value||start;
+    if(due<start) [start,due]=[due,start];
+    const tplId=$('#mpTpl').value;
+    const pid=uid();
+    this.state.projects.push({id:pid,name,start,due,unit:""});
+    this.state.activeProjectId=pid;
+    if(tplId){
+      const tp=this.state.templates.find(x=>x.id===tplId);
+      if(tp){ let base=Date.now(); tp.tasks.forEach((t,i)=>this.state.tasks.push(
+        {id:uid(),projectId:pid,title:t.title,stage:t.stage||"未着手",est:t.est||0,done:false,doneAt:null,order:base+i})); }
+    }
+    this.closeModal(); this.buildReport(); this.tab('dash'); this.render(); toast('プロジェクトを作成');
+  },
+
+  // ---- project settings ----
+  openProjectSettings(){
+    const p=this.proj(); if(!p)return;
+    $('#modal').innerHTML=`
+      <h3>プロジェクト設定</h3>
+      <p class="hint">締切のリスケもここで。ノルマとペースは自動で再計算されます。</p>
+      <label>プロジェクト名</label>
+      <input class="field" id="psName" value="${esc(p.name)}">
+      <div class="row">
+        <div><label>開始日</label><input class="field" id="psStart" type="date" value="${p.start}"></div>
+        <div><label>締切</label><input class="field" id="psDue" type="date" value="${p.due}"></div>
+      </div>
+      <label>量の単位（任意・例：語 / ページ / 節）</label>
+      <input class="field" id="psUnit" value="${esc(p.unit||'')}" placeholder="件">
+      <label style="margin-top:18px">危険操作</label>
+      <button class="btn ghost" style="width:100%;color:var(--warn);border-color:var(--warn)" onclick="App.deleteProject('${p.id}')">このプロジェクトを削除</button>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="App.closeModal()">キャンセル</button>
+        <button class="btn" onclick="App.saveProjectSettings('${p.id}')">保存</button>
+      </div>`;
+    openScrim();
+  },
+  saveProjectSettings(id){
+    const p=this.state.projects.find(x=>x.id===id); if(!p)return;
+    const name=$('#psName').value.trim(); if(!name){ toast('名前を入力'); return; }
+    let start=$('#psStart').value||p.start, due=$('#psDue').value||p.due;
+    if(due<start) [start,due]=[due,start]; // 逆転していたら入れ替え（ISO文字列は辞書順比較でOK）
+    p.name=name; p.start=start; p.due=due; p.unit=$('#psUnit').value.trim();
+    this.closeModal(); this.buildReport(); this.render(); toast('保存しました');
+  },
+  deleteProject(id){
+    const p=this.state.projects.find(x=>x.id===id);
+    if(!confirm(`「${p?p.name:''}」とそのタスク・記録をすべて削除します。よろしいですか？`)) return;
+    this.state.projects=this.state.projects.filter(x=>x.id!==id);
+    this.state.tasks=this.state.tasks.filter(t=>t.projectId!==id);
+    this.state.logs=this.state.logs.filter(l=>l.projectId!==id);
+    if(this.state.projects.length===0){
+      const f=this.fresh();
+      this.state.projects=f.projects; this.state.activeProjectId=f.activeProjectId;
+    } else this.state.activeProjectId=this.state.projects[0].id;
+    this.closeModal(); this.buildReport(); this.render(); toast('削除しました');
+  },
+
+  // ---- data modal ----
+  openDataModal(){
+    $('#modal').innerHTML=`
+      <h3>バックアップ / 復元</h3>
+      <p class="hint">データはこの端末のブラウザに保存されます。書き出して保管すれば別端末へ移せます。</p>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ghost" onclick="App.exportData()">JSON書き出し</button>
+        <button class="btn ghost" onclick="$('#importFile').click()">JSON読み込み</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json" class="hide" onchange="App.importData(event)">
+      <label style="margin-top:18px">危険操作</label>
+      <button class="btn ghost" style="width:100%;color:var(--warn);border-color:var(--warn)" onclick="App.resetAll()">全データをリセット</button>
+      <div class="modal-actions"><button class="btn" onclick="App.closeModal()">閉じる</button></div>`;
+    openScrim();
+  },
+  exportData(){
+    const blob=new Blob([JSON.stringify(this.state,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`pace-backup-${todayStr()}.json`; a.click(); toast('書き出しました');
+  },
+  importData(ev){
+    const f=ev.target.files[0]; if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!d.projects) throw 0;
+      this.state=d; this.persist(); this.closeModal(); this.buildReport(); this.render(); toast('読み込みました');
+    }catch(e){ toast('ファイルが不正です'); } };
+    r.readAsText(f);
+  },
+  resetAll(){
+    if(!confirm('全プロジェクト・タスク・テンプレを削除します。元に戻せません。よろしいですか？')) return;
+    localStorage.removeItem(Store.key); this.state=this.fresh(); this.persist();
+    this.closeModal(); this.buildReport(); this.render(); toast('リセットしました');
+  },
+
+  closeModal(){ closeScrim(); },
+};
+
+function esc(s){ return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function openScrim(){ $('#scrim').classList.add('open'); }
+function closeScrim(){ $('#scrim').classList.remove('open'); }
+$('#scrim').addEventListener('click',e=>{ if(e.target.id==='scrim') closeScrim(); });
+let toastT;
+function toast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),1900); }
+
+let rszT;
+window.addEventListener('resize',()=>{ clearTimeout(rszT); rszT=setTimeout(()=>{ if(App.currentTab==='dash') App.renderBurndown(); },150); });
+
+App.init();
+</script>
+</body>
+</html>
